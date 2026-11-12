@@ -92,6 +92,23 @@ impl Scanner<'_> {
         pos
     }
 
+    fn qualified_tail(&self, mut pos: usize) -> usize {
+        while self.byte(pos) == b'.' {
+            let next = pos + 1;
+            if self.byte(next) == b'`' {
+                match quoted_end(self.sql, next, false) {
+                    Some(end) => pos = end,
+                    None => break,
+                }
+            } else if identifier(self.byte(next)) {
+                pos = self.qualified_end(next);
+            } else {
+                break;
+            }
+        }
+        pos
+    }
+
     fn normal(&mut self, start: usize, preserve_case: bool) {
         let bytes = &self.sql[start..self.pos];
         if self.options.format && !preserve_case {
@@ -528,6 +545,7 @@ impl Scanner<'_> {
                 b'\'' | b'"' => self.string(start, Kind::String)?,
                 b'`' => {
                     self.pos = quoted_end(self.sql, start, false).ok_or(start)?;
+                    self.pos = self.qualified_tail(self.pos);
                     self.normal(start, true);
                 }
                 b'n' | b'N' if self.byte(start + 1) == b'\'' => {
